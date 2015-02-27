@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Runtime.Remoting.Messaging;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using CsvHelper;
 using Newtonsoft.Json;
 
 namespace DownloadBlockChainHeaders
@@ -16,16 +19,36 @@ namespace DownloadBlockChainHeaders
 
             var webClient = new WebClient();
             var uriRoot = "https://blockexplorer.com/rawblock/";
-            var hash = "00000000000000000790ec59fe9f006a95b610120ed6ab6ce0fcd190240a8a21";
-            var first = webClient.DownloadString(uriRoot + hash);//Last as of 2015/02/2015
+            var hash = "00000000000000001399e1e0da85c23d2f1dfabd5db4d826ee926898c9567d5b";
+            var first = webClient.DownloadString(uriRoot + hash);
 
-            var headerObject = JsonConvert.DeserializeObject<BlockHeader>(first);
-            Console.WriteLine(headerObject.hash);
-            for (int i = 0; i < 10; i++)
+            using (var textWriter = File.AppendText("blockHeaders.csv"))
             {
-                headerObject = JsonConvert.DeserializeObject<BlockHeader>(webClient.DownloadString(uriRoot + headerObject.prev_block));
+                var csv = new CsvWriter(textWriter) { Configuration = { HasHeaderRecord = true } };
+                var headerObject = JsonConvert.DeserializeObject<BlockHeader>(first);
+                //textWriter.WriteLine("hash,ver,prev_block,mrkl_root,time,bits,nonce");
+                //csv.WriteHeader<BlockHeader>();
+                csv.WriteRecord(headerObject);
                 Console.WriteLine(headerObject.hash);
+                while (headerObject.prev_block != "0000000000000000000000000000000000000000000000000000000000000000")
+                {
+                    try
+                    {
+                        headerObject =
+                            JsonConvert.DeserializeObject<BlockHeader>(
+                                webClient.DownloadString(uriRoot + headerObject.prev_block));
+                        csv.WriteRecord(headerObject);
+                        textWriter.FlushAsync();
+                        Console.WriteLine(headerObject.hash);
+                        Thread.Sleep(200);
+                    }
+                    catch (Exception)
+                    {
+                        Thread.Sleep(1000);
+                    }
+                }
             }
+            Console.WriteLine("Complete");
             Console.ReadKey();
         }
     }
